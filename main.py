@@ -1,13 +1,14 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, HTTPException, Depends
+from sqlalchemy.orm import Session
 
+import database
+import models
+import schemas
 
 app = FastAPI()
 
 
-class Produto(BaseModel):
-    nome: str = Field(min_length=2, max_length=100) # min_length = tamanho mínimo / max_length=100 = tamanho máximo de caracteres
-    preco: float = Field(gt=0) # greater than = maior que.
+models.Base.metadata.create_all(bind=database.engine) # Cria as tabelas no banco de dados, caso elas ainda não existam.
 
 
 produtos = [  # memória temporária
@@ -32,9 +33,11 @@ def inicio():
     return {"mensagem": "FoodAPI está funcionando!"}
 
 
-@app.get("/produtos")
-def listar_produtos():
-    return produtos
+@app.get("/produtos", response_model=list[schemas.ProdutoResponse])
+def listar_produtos(db: Session = Depends(database.get_db)):
+    return db.query(models.ProdutoDB).all()
+
+
 
 @app.get("/produtos/{id}")
 def busar_produtos(id: int):
@@ -50,7 +53,7 @@ def busar_produtos(id: int):
     )
 
 @app.post("/produtos")
-def criar_produto(produto: Produto):
+def criar_produto(produto: schemas.ProdutoCreate):
     global proximo_id
 
     novo_produto = {
@@ -67,7 +70,7 @@ def criar_produto(produto: Produto):
 
 
 @app.put("/produtos/{id}")
-def editar_produto(id: int, produto: Produto):
+def editar_produto(id: int, produto: schemas.ProdutoCreate):
     for produto_existente in produtos:
          if produto_existente["id"] == id:
             produto_existente["nome"] = produto.nome

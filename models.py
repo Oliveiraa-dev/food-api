@@ -1,21 +1,29 @@
-from sqlalchemy import Column, Integer, String, Float
-from database import Base # iomport das variavel base que foi criada no arquivo database.py
-
-class ProdutoDB(Base): 
-    
-
-    __tablename__ = "produtos" # nome da tabela que vai ser criada no banco de dados.
+from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy.orm import relationship
+from database import Base
 
 
-    
-    
-    id = Column(Integer, primary_key=True, index=True) # Coluna 'id': É um número inteiro (Integer), é a chave principal (primary_key), 
-                                                       # e vai criar números automáticos(index=True)
-    
-   
-    nome = Column(String, index=True)  # Coluna 'nome': É um texto (String)
-    
-   
-    preco = Column(Float)  # Coluna 'preco': É um número decimal (Float)
+# 1. Tabela de Categorias (Lanches, Bebidas, Sobremesas, etc.)
+class CategoriaDB(Base):
+    __tablename__ = "categorias"
 
-    
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(50), unique=True, index=True, nullable=False)
+
+    # Relacionamento: uma categoria pode ter muitos produtos
+    produtos = relationship("ProdutoDB", back_populates="categoria")
+
+
+# 2. Tabela de Produtos
+class ProdutoDB(Base):
+    __tablename__ = "produtos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(100), index=True, nullable=False)
+    preco = Column(Float, nullable=False)
+
+    # Chave estrangeira que aponta para a tabela "categorias"
+    categoria_id = Column(Integer, ForeignKey("categorias.id"), nullable=True)
+
+    # Relacionamento: cada produto pertence a uma categoria
+    categoria = relationship("CategoriaDB", back_populates="produtos")

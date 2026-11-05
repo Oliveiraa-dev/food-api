@@ -1,19 +1,12 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from sqlalchemy.exc import SQLAlchemyError
-import database
-import models
 from routers import produtos, categorias
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Executado ao iniciar o servidor: cria as tabelas no MySQL se não existirem
-    try:
-        models.Base.metadata.create_all(bind=database.engine)
-    except SQLAlchemyError as e:
-        print(f"AVISO: Falha ao inicializar tabelas no banco de dados: {e}")
-        print("Certifique-se de que o servidor MySQL (XAMPP) está ativo e acessível.")
+    # Ciclo de vida da aplicação:
+    # A criação e versionamento de tabelas é gerenciada exclusivamente pelo Alembic.
     yield
 
 

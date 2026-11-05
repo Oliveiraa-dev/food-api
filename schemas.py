@@ -1,5 +1,5 @@
 from decimal import Decimal
-from pydantic import BaseModel, Field, ConfigDict, field_serializer
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ==========================================
@@ -28,10 +28,6 @@ class ProdutoBase(BaseModel):
     nome: str = Field(min_length=2, max_length=100, description="Nome do produto")
     preco: Decimal = Field(gt=0, decimal_places=2, max_digits=10, description="Preço unitário em Reais, maior que zero")
     categoria_id: int | None = Field(default=None, description="ID da categoria à qual o produto pertence")
-
-    @field_serializer("preco", when_used="json")
-    def serialize_preco(self, v: Decimal):
-        return float(v)
 
 
 class ProdutoCreate(ProdutoBase):

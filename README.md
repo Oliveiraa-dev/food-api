@@ -1,115 +1,133 @@
-# FoodAPI 🍔🍕🥤
+# FoodAPI
 
-API RESTful moderna e robusta para gerenciamento de cardápio, produtos e categorias de restaurantes/lanchonetes, desenvolvida com **FastAPI**, **SQLAlchemy** e integrada ao banco de dados **MySQL** (via XAMPP).
+Bem-vindo ao FoodAPI! Este projeto nasceu da necessidade de criar um backend limpo, confiável e bem estruturado para o gerenciamento de cardápios, categorias e produtos alimentícios. 
 
----
-
-## 🎯 Objetivo
-
-Fornecer um backend performático, seguro e bem estruturado para o controle completo de produtos alimentícios e suas respectivas categorias, com validações de integridade, suporte a valores monetários de alta precisão (Decimal), paginação de registros, busca dinâmica e gerenciamento de migrações de banco de dados.
+A ideia central aqui foi ir além de um CRUD básico, aplicando boas práticas de engenharia de software do mundo real: isolamento de banco de dados nos testes, controle estrito de tipos monetários, paginação e ordenação flexíveis e versionamento do esquema do banco com migrações.
 
 ---
 
-## 🛠️ Tecnologias Utilizadas
+## Por que o projeto foi desenhado desta forma?
 
-- **[FastAPI](https://fastapi.tiangolo.com/)**: Framework web assíncrono de alto desempenho para construção de APIs em Python.
-- **[SQLAlchemy 2.0](https://www.sqlalchemy.org/)**: ORM padrão da indústria para modelagem e mapeamento de dados relacionais.
-- **[MySQL (XAMPP)](https://www.apachefriends.org/)**: Sistema gerenciador de banco de dados relacional.
-- **[PyMySQL](https://pymysql.readthedocs.io/) & [Cryptography](https://cryptography.io/)**: Driver de conexão seguro entre Python e MySQL.
-- **[Pydantic v2](https://docs.pydantic.dev/)**: Validação estrita de tipos, regras de negócio e serialização JSON.
-- **[Alembic](https://alembic.sqlalchemy.org/)**: Controle de versionamento e migrações do esquema do banco de dados.
-- **[python-dotenv](https://github.com/theskumar/python-dotenv)**: Gerenciamento seguro de configurações via variáveis de ambiente.
-- **[Pytest](https://docs.pytest.org/) & [HTTPX](https://www.python-httpx.org/)**: Suíte de testes automatizados com banco isolado em memória (SQLite).
-- **[Uvicorn](https://www.uvicorn.org/)**: Servidor ASGI rápido para execução da aplicação.
+Durante o desenvolvimento, tomamos algumas decisões arquiteturais importantes que valem a pena destacar:
 
----
+1. **Valores monetários com precisão exata (Decimal)**  
+   Trabalhar com dinheiro usando números de ponto flutuante (`float`) é uma armadilha comum que gera erros cumulativos de arredondamento. Aqui, usamos `Numeric(10, 2)` no banco de dados e `Decimal` com validações no Pydantic, garantindo precisão de centavos em qualquer transação.
 
-## ✨ Funcionalidades
+2. **Ciclo de vida assíncrono com Lifespan**  
+   Em versões anteriores, a criação automática de tabelas rodava diretamente no momento em que o módulo era importado. Isso causava dores de cabeça, pois importar o aplicativo para rodar um teste tentava conectar ao MySQL antes da hora. Movemos essa inicialização para o evento de `lifespan` do FastAPI. Agora, o MySQL só é chamado quando a API sobe de verdade para atender requisições.
 
-- **Gerenciamento de Categorias**:
-  - Cadastro de categorias com validação de unicidade de nome.
-  - Listagem ordenada por ID.
-  - Consulta por ID com tratamento amigável de erro (404).
-  - Edição com validação contra nomes duplicados em outras categorias.
-  - Exclusão protegida (impede exclusão se houver produtos vinculados).
-- **Gerenciamento de Produtos**:
-  - Cadastro de produtos com preço monetário exato (`Decimal(10, 2)` / `gt=0`).
-  - Vinculação a categorias com validação de chave estrangeira existente (permite produtos sem categoria).
-  - Listagem com **paginação** (`skip` e `limit`).
-  - Ordenação dinâmica por `id`, `nome` ou `preco`.
-  - Filtro por ID de categoria.
-  - Busca por nome com correspondência *case-insensitive* (`ilike`).
-  - Edição e remoção de produtos com transações seguras (`rollback` em erros).
-- **Arquitetura Resiliente**:
-  - Gerenciamento de ciclo de vida (`lifespan`) para inicialização de tabelas sem bloqueio em imports.
-  - Isolamento completo do ambiente de testes via banco de dados SQLite em memória (`:memory:`).
+3. **Testes automatizados 100% seguros e independentes**  
+   Os testes rodam sobre um banco SQLite em memória (`:memory:`), criando e destruindo as tabelas dinamicamente a cada bateria de testes. Isso significa que você pode rodar a suíte de testes quantas vezes quiser sem qualquer risco de alterar, sujar ou apagar os registros do seu MySQL local.
+
+4. **Tratamento defensivo de transações**  
+   Operações que alteram dados (criação, edição e exclusão) são protegidas com blocos try/except específicos para erros de banco. Se algo falhar — como uma tentativa de duplicar uma categoria com nome já existente —, a transação sofre rollback imediatamente e o usuário recebe uma mensagem clara e amigável em vez de um erro 500 confuso.
 
 ---
 
-## 📂 Estrutura de Pastas
+## O que a API faz na prática
+
+### Gestão de Categorias
+- Criação de categorias com garantia de nome único.
+- Consulta de categorias pelo identificador (ID).
+- Listagem geral sempre organizada em ordem crescente por ID.
+- Atualização de nomes respeitando a unicidade no banco.
+- Exclusão segura: a API recusa a exclusão de qualquer categoria que ainda possua produtos atrelados a ela.
+
+### Gestão de Produtos
+- Cadastro de produtos com preço obrigatório, positivo e formato decimal.
+- Associação a categorias existentes ou opção de cadastrar produtos avulsos sem categoria (`categoria_id` nulo).
+- Listagem completa com paginação customizável via parâmetros `skip` e `limit`.
+- Ordenação dinâmica por `id`, `nome` ou `preco`.
+- Filtro por categoria específica.
+- Busca textual flexível por nome com correspondência sem distinção entre maiúsculas e minúsculas (`ilike`).
+- Atualização e exclusão com consistência transacional.
+
+---
+
+## Tecnologias que dão vida ao projeto
+
+- **Python 3.10+**: Linguagem base do projeto.
+- **FastAPI**: Framework web moderno, focado em performance, tipagem estrita e documentação automática.
+- **SQLAlchemy 2.0**: O ORM utilizado para mapear os modelos relacionais e gerenciar as consultas ao banco.
+- **MySQL / PyMySQL**: Banco de dados relacional executado localmente via XAMPP com driver em Python puro.
+- **Pydantic v2**: Validação robusta de esquemas de entrada e serialização de saída.
+- **Alembic**: Ferramenta de versionamento e gerenciamento de migrações do banco de dados.
+- **python-dotenv**: Carregamento seguro de credenciais a partir de arquivos `.env`.
+- **Pytest & HTTPX**: Criação e execução dos testes unitários e de integração através de um cliente assíncrono.
+- **Uvicorn**: Servidor ASGI que roda a aplicação com suporte a hot reload.
+
+---
+
+## Estrutura de Pastas
 
 ```text
 food-api/
-├── migrations/                 # Migrações do banco de dados (Alembic)
-│   ├── versions/               # Histórico de revisões das migrações
-│   └── env.py                  # Configuração do ambiente Alembic
-├── routers/                    # Módulos de rotas da aplicação
-│   ├── __init__.py
-│   ├── categorias.py           # Endpoints de categorias
-│   └── produtos.py             # Endpoints de produtos
-├── tests/                      # Suíte de testes automatizados
-│   └── test_api.py             # Testes unitários e de integração
-├── .env                        # Variáveis de ambiente locais (ignorado no git)
-├── .env.example                # Exemplo de configuração de variáveis
-├── .gitignore                  # Arquivos e pastas ignorados pelo controle de versão
-├── alembic.ini                 # Arquivo de configuração do Alembic
-├── database.py                 # Conexão com o banco de dados e sessão SQLAlchemy
-├── main.py                     # Ponto de entrada FastAPI e ciclo de vida da API
-├── models.py                   # Modelos relacionais ORM (SQLAlchemy)
-├── requirements.txt            # Dependências do projeto
-├── schemas.py                  # Modelos Pydantic (validação de entrada e saída)
-└── README.md                   # Documentação do projeto
+├── migrations/                 # Controle de versionamento do banco (Alembic)
+│   ├── versions/               # Arquivos gerados para cada migração
+│   └── env.py                  # Configuração do ambiente de migração
+├── routers/                    # Divisão das rotas por domínio de negócio
+│   ├── categorias.py           # Endpoints relacionados a categorias
+│   └── produtos.py             # Endpoints relacionados a produtos
+├── tests/                      # Bateria de testes automatizados
+│   └── test_api.py             # Cenários de teste com SQLite em memória
+├── .env                        # Variáveis locais de ambiente (fora do Git)
+├── .env.example                # Arquivo modelo com as variáveis necessárias
+├── .gitignore                  # Arquivos e diretórios ignorados pelo Git
+├── alembic.ini                 # Arquivo de inicialização do Alembic
+├── database.py                 # Conexão, sessão e configurações do banco
+├── main.py                     # Instância principal da API e ciclo de vida
+├── models.py                   # Modelos relacionais (tabelas do banco)
+├── requirements.txt            # Dependências fixadas do projeto
+├── schemas.py                  # Schemas do Pydantic (validação e formato)
+└── README.md                   # Esta documentação
 ```
 
 ---
 
-## 🚀 Instalação e Configuração
+## Como Rodar o Projeto Passo a Passo
 
-### 1. Pré-requisitos
+### 1. Pré-requisitos no seu computador
 
-- Python 3.10 ou superior instalado.
-- [XAMPP](https://www.apachefriends.org/) instalado com o serviço **MySQL** ativo.
+- Python instalado (versão 3.10 ou mais recente).
+- XAMPP instalado (ou outro servidor MySQL local equivalente rodando na porta 3306).
 
-### 2. Configurar o Ambiente Virtual
+### 2. Configurando o ambiente virtual
 
-No diretório raiz do projeto:
+Recomendamos utilizar um ambiente virtual isolado para evitar conflito com outros pacotes do seu sistema.
+
+No terminal (PowerShell no Windows):
 
 ```powershell
-# Criação do ambiente virtual (caso ainda não exista)
+# Criar o ambiente virtual caso ainda não exista
 python -m venv .venv
 
-# Ativação no Windows (PowerShell)
+# Ativar o ambiente virtual
 .\.venv\Scripts\Activate.ps1
+```
 
-# Ativação no Linux/macOS (Bash)
+Caso esteja utilizando Linux ou macOS:
+
+```bash
 source .venv/bin/activate
 ```
 
-### 3. Instalar as Dependências
+### 3. Instalando as dependências
+
+Com o ambiente ativado, instale as bibliotecas necessárias:
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-### 4. Configurar as Variáveis de Ambiente (`.env`)
+### 4. Configurando as variáveis de ambiente
 
-Copie o arquivo `.env.example` para `.env`:
+Copie o arquivo de exemplo para criar o seu `.env` local:
 
 ```powershell
 cp .env.example .env
 ```
 
-Edite o arquivo `.env` conforme seu ambiente MySQL (padrão XAMPP):
+Abra o arquivo `.env` gerado e confirme as credenciais de acesso ao seu MySQL (as padrões do XAMPP já vêm configuradas):
 
 ```env
 DB_USER=root
@@ -120,102 +138,98 @@ DB_NAME=food_api_db
 DATABASE_URL=mysql+pymysql://root:@localhost:3306/food_api_db
 ```
 
-### 5. Iniciar o Banco de Dados MySQL
+### 5. Iniciando o servidor MySQL
 
-1. Abra o painel de controle do **XAMPP Control Panel**.
-2. Clique em **Start** no módulo **MySQL** (porta padrão: `3306`).
-3. Certifique-se de que o banco `food_api_db` existe (pode ser criado via phpMyAdmin em `http://localhost/phpmyadmin` ou pelo console MySQL).
+1. Abra o painel do **XAMPP Control Panel**.
+2. Clique no botão **Start** ao lado de **MySQL**.
+3. Verifique se a porta `3306` está ativa.
+4. O banco `food_api_db` será utilizado para persistir os dados.
 
----
+### 6. Executando a API
 
-## 🏃 Executando a Aplicação
-
-Para iniciar o servidor FastAPI em modo de desenvolvimento (com recarregamento automático):
+Com o banco de dados ligado e o ambiente ativado, suba a aplicação com o comando:
 
 ```powershell
 uvicorn main:app --reload
 ```
 
-A API estará acessível em:
-- **URL Base**: [http://127.0.0.1:8000](http://127.0.0.1:8000)
-- **Documentação Interativa (Swagger UI)**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **Documentação Alternativa (ReDoc)**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
+A API estará pronta para receber requisições em:
+- Endereço principal: `http://127.0.0.1:8000`
+- Documentação interativa (Swagger UI): `http://127.0.0.1:8000/docs`
+- Documentação alternativa (ReDoc): `http://127.0.0.1:8000/redoc`
 
 ---
 
-## 🧪 Executando os Testes Automatizados
+## Exemplos Práticos de Uso
 
-Os testes rodam de forma 100% isolada utilizando SQLite em memória, sem interferir nem depender dos dados do MySQL:
+Você pode testar esses exemplos diretamente pelo Swagger UI no navegador ou usando clientes como Postman, Insomnia ou cURL.
 
-```powershell
-pytest -v
-```
+### 1. Cadastrando uma Categoria
 
----
+Envie uma requisição `POST` para `/categorias/` com o corpo:
 
-## 📡 Exemplos de Uso da API
-
-### Criar uma Categoria
-**Requisição:**
-`POST /categorias/`
 ```json
 {
-  "nome": "Lanches Especiais"
+  "nome": "Sanduíches Especiais"
 }
 ```
 
-**Resposta (`201 Created`):**
+Retorno esperado (`201 Created`):
+
 ```json
 {
   "id": 1,
-  "nome": "Lanches Especiais"
+  "nome": "Sanduíches Especiais"
 }
 ```
 
----
+### 2. Cadastrando um Produto Vinculado
 
-### Criar um Produto Vinculado
-**Requisição:**
-`POST /produtos/`
+Envie uma requisição `POST` para `/produtos/` com o corpo:
+
 ```json
 {
-  "nome": "X-Picanha Cheddar",
-  "preco": 38.90,
+  "nome": "Hambúrguer de Costela",
+  "preco": 34.90,
   "categoria_id": 1
 }
 ```
 
-**Resposta (`201 Created`):**
+Retorno esperado (`201 Created`):
+
 ```json
 {
   "id": 1,
-  "nome": "X-Picanha Cheddar",
-  "preco": 38.90,
+  "nome": "Hambúrguer de Costela",
+  "preco": 34.90,
   "categoria_id": 1,
   "categoria": {
     "id": 1,
-    "nome": "Lanches Especiais"
+    "nome": "Sanduíches Especiais"
   }
 }
 ```
 
----
+### 3. Listando Produtos com Filtros, Paginação e Ordenação
 
-### Listar Produtos com Paginação e Ordenação
-**Requisição:**
-`GET /produtos/?skip=0&limit=10&ordenar_por=preco&busca=cheddar`
+Para buscar produtos ordenados por preço, pulando o primeiro e limitando a dez itens:
 
-**Resposta (`200 OK`):**
+```text
+GET /produtos/?skip=0&limit=10&ordenar_por=preco&busca=costela
+```
+
+Retorno esperado (`200 OK`):
+
 ```json
 [
   {
     "id": 1,
-    "nome": "X-Picanha Cheddar",
-    "preco": 38.90,
+    "nome": "Hambúrguer de Costela",
+    "preco": 34.90,
     "categoria_id": 1,
     "categoria": {
       "id": 1,
-      "nome": "Lanches Especiais"
+      "nome": "Sanduíches Especiais"
     }
   }
 ]
@@ -223,26 +237,44 @@ pytest -v
 
 ---
 
-## 🔄 Gerenciando Migrações com Alembic
+## Executando a Bateria de Testes
 
-O projeto está configurado para gerenciar alterações na estrutura das tabelas usando Alembic:
+Para rodar todos os testes automatizados e conferir a cobertura das regras de negócio:
 
-- **Gerar uma nova migração baseada nos modelos:**
+```powershell
+pytest -v
+```
+
+Todos os testes rodam de maneira isolada em memória, garantindo rapidez e zero impacto nos seus dados reais.
+
+---
+
+## Gerenciando o Banco com Alembic
+
+Se você alterar qualquer campo nos arquivos de modelo (`models.py`) e precisar refletir isso no banco de dados sem perder dados existentes, utilize os comandos do Alembic:
+
+- **Gerar automaticamente um arquivo de migração:**
   ```powershell
-  alembic revision --autogenerate -m "descricao_da_alteracao"
+  alembic revision --autogenerate -m "descreva a sua alteracao aqui"
   ```
 
-- **Aplicar as migrações no banco MySQL:**
+- **Aplicar as migrações pendentes no MySQL:**
   ```powershell
   alembic upgrade head
   ```
 
-- **Reverter a última migração aplicada:**
+- **Reverter a última alteração aplicada:**
   ```powershell
   alembic downgrade -1
   ```
 
-- **Verificar a versão atual aplicada no banco:**
+- **Ver a versão atual da base de dados:**
   ```powershell
   alembic current
   ```
+
+---
+
+## Conclusão
+
+Este repositório foi construído com cuidado para servir tanto como uma base sólida para projetos reais quanto como referência de arquitetura limpa com FastAPI e SQLAlchemy. Sinta-se à vontade para explorar os módulos, enviar sugestões ou adaptar às suas necessidades!

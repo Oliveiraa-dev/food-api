@@ -97,3 +97,4 @@ def excluir_categoria(id: int, db: Session = Depends(database.get_db)):
 
     db.delete(categoria_db)
     db.commit()
+

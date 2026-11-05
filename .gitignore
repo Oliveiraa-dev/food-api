@@ -1,4 +1,4 @@
-﻿# Ambiente virtual
+# Ambiente virtual
 .venv/
 venv/
 env/
@@ -15,6 +15,7 @@ __pycache__/
 
 # Banco local
 *.db
+banco_de_dados.db
 *.sqlite
 *.sqlite3
 

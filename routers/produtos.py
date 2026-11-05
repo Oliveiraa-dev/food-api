@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 import database
 import models
@@ -29,11 +30,14 @@ def validar_categoria_existente(db: Session, categoria_id: int | None):
             )
 
 
-# 1. LISTAR PRODUTOS (Com suporte a filtro por categoria e busca por nome)
+# 1. LISTAR PRODUTOS (Com suporte a paginação, ordenação, filtro por categoria e busca por nome)
 @router.get("/", response_model=list[schemas.ProdutoResponse])
 def listar_produtos(
     categoria_id: int | None = Query(default=None, description="Filtrar produtos por ID da categoria"),
     busca: str | None = Query(default=None, description="Buscar produtos por parte do nome"),
+    skip: int = Query(default=0, ge=0, description="Número de registros a pular (paginação)"),
+    limit: int = Query(default=10, ge=1, le=100, description="Número máximo de registros a retornar"),
+    ordenar_por: str = Query(default="id", description="Campo para ordenação: 'id', 'nome' ou 'preco'"),
     db: Session = Depends(database.get_db),
 ):
     query = db.query(models.ProdutoDB)
@@ -42,9 +46,21 @@ def listar_produtos(
         query = query.filter(models.ProdutoDB.categoria_id == categoria_id)
 
     if busca:
-        query = query.filter(models.ProdutoDB.nome.contains(busca))
+        query = query.filter(models.ProdutoDB.nome.ilike(f"%{busca}%"))
 
-    return query.all()
+    campos_ordenacao = {
+        "id": models.ProdutoDB.id,
+        "nome": models.ProdutoDB.nome,
+        "preco": models.ProdutoDB.preco,
+    }
+    coluna = campos_ordenacao.get(ordenar_por)
+    if coluna is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Campo de ordenação inválido. Escolha entre: 'id', 'nome' ou 'preco'."
+        )
+
+    return query.order_by(coluna.asc()).offset(skip).limit(limit).all()
 
 
 # 2. BUSCAR UM PRODUTO PELO ID
@@ -59,14 +75,26 @@ def criar_produto(
     produto: schemas.ProdutoCreate,
     db: Session = Depends(database.get_db),
 ):
-    # Se uma categoria foi informada, valida se ela existe
     validar_categoria_existente(db, produto.categoria_id)
 
     produto_db = models.ProdutoDB(**produto.model_dump())
     db.add(produto_db)
-    db.commit()
-    db.refresh(produto_db)
-    return produto_db
+    try:
+        db.commit()
+        db.refresh(produto_db)
+        return produto_db
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Erro de integridade ao cadastrar produto. Verifique os dados informados."
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no banco de dados ao salvar o produto."
+        )
 
 
 # 4. EDITAR PRODUTO
@@ -77,22 +105,46 @@ def editar_produto(
     db: Session = Depends(database.get_db),
 ):
     produto_db = get_produto_db_or_404(db, id)
-
-    # Se uma categoria foi informada, valida se ela existe
     validar_categoria_existente(db, produto.categoria_id)
 
     produto_db.nome = produto.nome
     produto_db.preco = produto.preco
     produto_db.categoria_id = produto.categoria_id
 
-    db.commit()
-    db.refresh(produto_db)
-    return produto_db
+    try:
+        db.commit()
+        db.refresh(produto_db)
+        return produto_db
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Erro de integridade ao atualizar produto. Verifique os dados informados."
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no banco de dados ao atualizar o produto."
+        )
 
 
 # 5. EXCLUIR PRODUTO
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def excluir_produto(id: int, db: Session = Depends(database.get_db)):
     produto_db = get_produto_db_or_404(db, id)
-    db.delete(produto_db)
-    db.commit()
+    try:
+        db.delete(produto_db)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Não foi possível excluir o produto devido a vínculos existentes no banco de dados."
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no banco de dados ao excluir o produto."
+        )

@@ -1,11 +1,31 @@
+import os
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# O endereço do XAMPP: usuário 'root', sem senha, no seu computador (localhost), banco 'food_api_db'
-SQLALCHEMY_DATABASE_URL = "mysql+pymysql://root:@localhost:3306/food_api_db"
+# Carrega as configurações do arquivo .env
+load_dotenv()
 
-# Liga o motor do banco de dados
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+# Configurações do banco de dados a partir de variáveis de ambiente
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "3306")
+DB_NAME = os.getenv("DB_NAME", "food_api_db")
+
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+)
+
+# Liga o motor do banco de dados com tratamento de erro
+try:
+    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+except Exception as e:
+    raise RuntimeError(
+        f"Falha ao inicializar o motor do banco de dados: {e}. "
+        f"Verifique as variáveis de ambiente em .env e certifique-se de que o MySQL está em execução."
+    ) from e
 
 # Fábrica de conversas com o banco
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -13,7 +33,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Molde das tabelas
 Base = declarative_base()
 
-# Função que abre e fecha a porta do banco a cada requisição
+# Função que abre e fecha a conexão com o banco a cada requisição
 def get_db():
     db = SessionLocal()
     try:

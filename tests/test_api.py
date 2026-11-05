@@ -14,7 +14,7 @@ import database
 import models
 from main import app
 
-# 1. Configuração de um banco de dados em memória exclusivo para testes (não afeta o MySQL)
+# 1. Configuração de um banco de dados SQLite em memória exclusivo para testes
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 engine_test = create_engine(
@@ -41,9 +41,10 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_banco():
-    # Cria as tabelas antes de cada teste e limpa depois
+    # Cria as tabelas antes de cada teste usando o engine de teste
     models.Base.metadata.create_all(bind=engine_test)
     yield
+    # Limpa as tabelas após cada teste
     models.Base.metadata.drop_all(bind=engine_test)
 
 
@@ -70,10 +71,11 @@ def test_criar_e_listar_categoria():
     assert criada["nome"] == "Lanches"
     assert "id" in criada
 
-    # 2. Listagem
+    # 2. Listagem (ordenada por ID)
     res_list = client.get("/categorias/")
     assert res_list.status_code == 200
     assert len(res_list.json()) == 1
+    assert res_list.json()[0]["nome"] == "Lanches"
 
 
 def test_erro_categoria_duplicada():
@@ -88,6 +90,16 @@ def test_buscar_categoria_nao_existente():
     res = client.get("/categorias/999")
     assert res.status_code == 404
     assert res.json()["detail"] == "Categoria não encontrada"
+
+
+def test_ordenacao_categorias():
+    client.post("/categorias/", json={"nome": "Sobremesas"})
+    client.post("/categorias/", json={"nome": "Acompanhamentos"})
+    res = client.get("/categorias/")
+    assert res.status_code == 200
+    dados = res.json()
+    assert len(dados) == 2
+    assert dados[0]["id"] < dados[1]["id"]
 
 
 # ========================================================
@@ -113,6 +125,20 @@ def test_criar_produto_vinculado_a_categoria():
     assert prod["categoria"]["nome"] == "Lanches"
 
 
+def test_criar_produto_sem_categoria():
+    # Produto sem categoria (categoria_id=None / nullable=True)
+    prod_res = client.post("/produtos/", json={
+        "nome": "Água Mineral",
+        "preco": 4.50,
+        "categoria_id": None
+    })
+    assert prod_res.status_code == 201
+    prod = prod_res.json()
+    assert prod["nome"] == "Água Mineral"
+    assert prod["categoria_id"] is None
+    assert prod["categoria"] is None
+
+
 def test_erro_criar_produto_com_categoria_inexistente():
     res = client.post("/produtos/", json={
         "nome": "Refrigerante",
@@ -131,6 +157,28 @@ def test_validacao_preco_invalido():
     })
     assert res.status_code == 422
 
+    res_zero = client.post("/produtos/", json={
+        "nome": "Produto Zero",
+        "preco": 0.00
+    })
+    assert res_zero.status_code == 422
+
+
+def test_preco_decimal_precisao():
+    # Testa representação decimal precisa (29.99)
+    res = client.post("/produtos/", json={
+        "nome": "X-Bacon Especial",
+        "preco": 29.99
+    })
+    assert res.status_code == 201
+    prod = res.json()
+    assert prod["preco"] == 29.99
+
+    # Busca pelo ID e valida novamente
+    res_get = client.get(f"/produtos/{prod['id']}")
+    assert res_get.status_code == 200
+    assert res_get.json()["preco"] == 29.99
+
 
 def test_filtrar_produtos_por_categoria_e_busca():
     # Cria categorias
@@ -147,10 +195,68 @@ def test_filtrar_produtos_por_categoria_e_busca():
     assert len(res_bebidas.json()) == 1
     assert res_bebidas.json()[0]["nome"] == "Coca-Cola"
 
-    # 2. Busca por texto
-    res_busca = client.get("/produtos/?busca=Bacon")
+    # 2. Busca por texto (case-insensitive com ilike)
+    res_busca = client.get("/produtos/?busca=bacon")
     assert len(res_busca.json()) == 1
     assert res_busca.json()[0]["nome"] == "X-Bacon"
+
+
+def test_paginacao_produtos():
+    # Cria 5 produtos
+    for i in range(1, 6):
+        client.post("/produtos/", json={"nome": f"Produto {i}", "preco": float(10 * i)})
+
+    # Página 1: limit 2, skip 0 -> retorna os 2 primeiros (IDs 1, 2)
+    res_p1 = client.get("/produtos/?skip=0&limit=2")
+    assert res_p1.status_code == 200
+    itens_p1 = res_p1.json()
+    assert len(itens_p1) == 2
+    assert itens_p1[0]["nome"] == "Produto 1"
+    assert itens_p1[1]["nome"] == "Produto 2"
+
+    # Página 2: limit 2, skip 2 -> retorna os 2 seguintes (IDs 3, 4)
+    res_p2 = client.get("/produtos/?skip=2&limit=2")
+    assert res_p2.status_code == 200
+    itens_p2 = res_p2.json()
+    assert len(itens_p2) == 2
+    assert itens_p2[0]["nome"] == "Produto 3"
+    assert itens_p2[1]["nome"] == "Produto 4"
+
+    # Página 3: limit 2, skip 4 -> retorna o último (ID 5)
+    res_p3 = client.get("/produtos/?skip=4&limit=2")
+    assert res_p3.status_code == 200
+    itens_p3 = res_p3.json()
+    assert len(itens_p3) == 1
+    assert itens_p3[0]["nome"] == "Produto 5"
+
+
+def test_ordenacao_produtos():
+    client.post("/produtos/", json={"nome": "X-Burger", "preco": 30.00})
+    client.post("/produtos/", json={"nome": "Açaí", "preco": 15.00})
+    client.post("/produtos/", json={"nome": "Pastel", "preco": 10.00})
+
+    # Ordenação por ID (padrão)
+    res_id = client.get("/produtos/?ordenar_por=id")
+    assert res_id.status_code == 200
+    nomes_por_id = [p["nome"] for p in res_id.json()]
+    assert nomes_por_id == ["X-Burger", "Açaí", "Pastel"]
+
+    # Ordenação por nome (alfabética)
+    res_nome = client.get("/produtos/?ordenar_por=nome")
+    assert res_nome.status_code == 200
+    nomes_por_nome = [p["nome"] for p in res_nome.json()]
+    assert nomes_por_nome == ["Açaí", "Pastel", "X-Burger"]
+
+    # Ordenação por preço
+    res_preco = client.get("/produtos/?ordenar_por=preco")
+    assert res_preco.status_code == 200
+    precos = [p["preco"] for p in res_preco.json()]
+    assert precos == [10.00, 15.00, 30.00]
+
+    # Ordenação inválida deve retornar 400
+    res_invalida = client.get("/produtos/?ordenar_por=invalido")
+    assert res_invalida.status_code == 400
+    assert "Campo de ordenação inválido" in res_invalida.json()["detail"]
 
 
 def test_editar_e_excluir_produto():
@@ -167,7 +273,7 @@ def test_editar_e_excluir_produto():
     res_del = client.delete(f"/produtos/{prod_id}")
     assert res_del.status_code == 204
 
-    # Confirmação de que sumiu
+    # Confirmação de que foi excluído
     res_check = client.get(f"/produtos/{prod_id}")
     assert res_check.status_code == 404
 
@@ -180,3 +286,14 @@ def test_bloquear_exclusao_de_categoria_com_produtos():
     res = client.delete(f"/categorias/{cat['id']}")
     assert res.status_code == 400
     assert "existem produtos vinculados" in res.json()["detail"]
+
+
+def test_integridade_categoria_duplicada():
+    # Cria a primeira vez
+    res1 = client.post("/categorias/", json={"nome": "Bebidas Geladas"})
+    assert res1.status_code == 201
+
+    # Tenta criar novamente para testar restrição de unicidade e integridade
+    res2 = client.post("/categorias/", json={"nome": "Bebidas Geladas"})
+    assert res2.status_code == 400
+    assert "Já existe uma categoria" in res2.json()["detail"]

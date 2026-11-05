@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 import database
 import models
@@ -18,10 +19,10 @@ def get_categoria_db_or_404(db: Session, id: int) -> models.CategoriaDB:
     return categoria
 
 
-# 1. LISTAR TODAS AS CATEGORIAS
+# 1. LISTAR TODAS AS CATEGORIAS (ordenadas por ID)
 @router.get("/", response_model=list[schemas.CategoriaResponse])
 def listar_categorias(db: Session = Depends(database.get_db)):
-    return db.query(models.CategoriaDB).all()
+    return db.query(models.CategoriaDB).order_by(models.CategoriaDB.id.asc()).all()
 
 
 # 2. BUSCAR CATEGORIA POR ID
@@ -46,9 +47,22 @@ def criar_categoria(
 
     nova_categoria = models.CategoriaDB(nome=categoria.nome)
     db.add(nova_categoria)
-    db.commit()
-    db.refresh(nova_categoria)
-    return nova_categoria
+    try:
+        db.commit()
+        db.refresh(nova_categoria)
+        return nova_categoria
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Já existe uma categoria cadastrada com o nome '{categoria.nome}'."
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no banco de dados ao salvar a categoria."
+        )
 
 
 # 4. EDITAR CATEGORIA
@@ -73,9 +87,22 @@ def editar_categoria(
         )
 
     categoria_db.nome = categoria.nome
-    db.commit()
-    db.refresh(categoria_db)
-    return categoria_db
+    try:
+        db.commit()
+        db.refresh(categoria_db)
+        return categoria_db
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Já existe outra categoria com o nome '{categoria.nome}'."
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no banco de dados ao atualizar a categoria."
+        )
 
 
 # 5. EXCLUIR CATEGORIA
@@ -95,6 +122,18 @@ def excluir_categoria(id: int, db: Session = Depends(database.get_db)):
             detail="Não é possível excluir esta categoria porque existem produtos vinculados a ela."
         )
 
-    db.delete(categoria_db)
-    db.commit()
-
+    try:
+        db.delete(categoria_db)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Não é possível excluir esta categoria devido a produtos ou vínculos associados."
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no banco de dados ao excluir a categoria."
+        )

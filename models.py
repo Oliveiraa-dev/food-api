@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -20,7 +20,7 @@ class ProdutoDB(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String(100), index=True, nullable=False)
-    preco = Column(Float, nullable=False)
+    preco = Column(Numeric(10, 2), nullable=False)
 
     # Chave estrangeira que aponta para a tabela "categorias"
     categoria_id = Column(Integer, ForeignKey("categorias.id"), nullable=True)

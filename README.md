@@ -49,9 +49,9 @@ O projeto prioriza boas práticas de engenharia de software para aplicações em
 
 ## Tecnologias Utilizadas
 
-- **Python 3.10+**: Linguagem de programação do projeto.
+- **Python 3.11+**: Linguagem de programação do projeto.
 - **FastAPI**: Framework web moderno para construção de APIs assíncronas de alta performance.
-- **SQLAlchemy 2.0**: ORM para modelagem relacional e comunicação com o banco.
+- **SQLAlchemy 2.1.1**: ORM para modelagem relacional e comunicação com o banco.
 - **MySQL (XAMPP)**: Banco de dados relacional padrão do projeto.
 - **PyMySQL & Cryptography**: Driver de conexão seguro entre Python e MySQL.
 - **Pydantic v2**: Validação de dados, esquemas e regras de negócio.
@@ -93,7 +93,7 @@ food-api/
 
 ### 1. Pré-requisitos
 
-- Python 3.10 ou superior instalado.
+- Python 3.11 ou superior instalado.
 - XAMPP instalado com o serviço MySQL ativo na porta 3306.
 
 ### 2. Ambiente Virtual
@@ -132,8 +132,9 @@ DB_PASSWORD=
 DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=food_api
-DATABASE_URL=mysql+pymysql://root:@localhost:3306/food_api
 ```
+
+A aplicação monta a URL de conexão automaticamente a partir dessas variáveis. `DATABASE_URL` é opcional: use-a somente quando quiser informar uma URL de conexão completa; quando definida, ela tem prioridade sobre as variáveis `DB_*`.
 
 Certifique-se de que o MySQL está em execução no painel de controle do XAMPP e que o banco `food_api` existe.
 
